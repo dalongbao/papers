@@ -27,4 +27,6 @@ devlog:
 * errors in resnet class witht the inputs; input channels is weird and also wrong
 * current shape is 100, 224, 224, 3; it expects (64, 7, 7, 64) with O being at the end and I being the front
 
+bugs:
+* an extra reshape inside the ``__call__`` messed the reshaping up
 

@@ -45,13 +45,21 @@ class ResBlock(nn.Module):
     # the no_blocks is variable but the interior structure of each layer is the same, except the no. channels
     # 
     expansion = 1 # Determines the ratio between IO channelsin a resblock, controls the dimesionality of the feature maps
+    # only used if bottleneck is used; useless here
 
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, downsample=None): # Block as described in the paper
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, downsample=None, groups=1, base_width=64, dilation=1, norm_layer=None): # Block as described in the paper
         super().__init__()
         """
         in_channels: int; add however many IO channels the block specifies (64, 64, 128, 256, 512) 
         out_channels: int; 
         """
+        if norm_layer is None:
+            self.norm_layer = nn.BatchNorm
+        if groups != 1 or base_width != 64:
+            raise ValueError('Block only supports groups=1 and base_width=64')
+        if dilation > 1:
+            raise NotImplementedError('Dilation > 1 not supported in Block')
+
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, bias=True)
         self.bn1 = nn.BatchNorm(num_features=out_channels)
         self.relu = nn.ReLU()
@@ -84,31 +92,51 @@ class ResBlock(nn.Module):
 
 
 class ResNet (nn.Module):
-    def __init__(self, block, layers, num_classes=1000, stride=1):
+    def __init__(self, block, layers, num_classes=1000, zero_init_residual=False, groups=1, width_per_group=64, replace_stride_with_dilation=None, norm_layer=None):
         """
         block: ResBlock
         layers = list of how many blocks are in each layer [3, 4, 6, 3]
         num_classes: no. classes, for classification
         """
         super().__init__()
-        self.in_channels = 224
-        self.conv1 = nn.Conv2d(in_channels=self.in_channels, out_channels=64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm(num_features=64)
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm
+        self._norm_layer = norm_layer
+
+        self.in_channels = 64
+        self.dilation = 1
+
+        if replace_stride_with_dilation is None:
+            # Replace stride with dilated convolution instead
+            replace_stride_with_dilation = [False, False, False]
+        if len(replace_stride_with_dilation) != 3:
+            raise ValueError(f"replace_stride_with_dilation should be None or a 3-element tuple, got {replace_stride_with_dilation}")
+        self.groups = groups
+        self.base_width = width_per_group
+
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=self.in_channels, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm(self.in_channels)
         self.relu = nn.ReLU()
 
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
 
         self.avgpool = nn.AvgPool2d((1, 1))
         self.fc = nn.Linear(input_dims=512*block.expansion, output_dims=num_classes)
 
     
-    def _make_layer(self, block, out_channels, blocks, stride=1):
+    def _make_layer(self, block, out_channels, blocks, stride=1, dilate=False):
+        norm_layer = self._norm_layer
         downsample = None
+        previous_dilation = self.dilation
+        if dilate:
+            self.dilation *= stride
+            stride = 1
+
         if stride != 1 or self.in_channels != out_channels * block.expansion:
             downsample = nn.Sequential(
                     nn.Conv2d(in_channels=self.in_channels, out_channels=out_channels * block.expansion, kernel_size=1, stride=stride, bias=False),  
@@ -116,17 +144,18 @@ class ResNet (nn.Module):
             )
 
         layers = []
-        layers.append(block(self.in_channels, out_channels, stride, downsample))
+        layers.append(block(in_channels=self.in_channels, out_channels=out_channels, stride=stride, downsample=downsample))
         self.in_channels = out_channels * block.expansion # Update in_channels
+        print(self.in_channels)
+
         for _ in range(1, blocks):
-            layers.append(block(self.in_channels, out_channels))  # Use self.in_channels instead of out_channels
+            layers.append(block(in_channels=self.in_channels, out_channels=out_channels, groups=self.groups, base_width=self.base_width, dilation=self.dilation, norm_layer=norm_layer))  # Use self.in_channels instead of out_channels
 
         return nn.Sequential(*layers)
 
 
     def __call__(self, x): 
         x = mx.array(x)
-        x = x.transpose((0, 3, 1, 2))
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -254,7 +283,6 @@ for i in range(no_epochs):
     preprocessed_train_images = np.stack([preprocess(image) for image in train_images])
 
     for X, y in batch_iterate(batch_size, preprocessed_train_images, train_labels):
-        print(type(X))
         loss, grads = loss_and_grad_fn(resnet34, X, y)
         optimizer.update(resnet34, grads)
         mx.eval(resnet34.parameters(), optimizer.state)
