@@ -24,9 +24,9 @@ This repo also serves as a devlog and notes.
 ![ResBlock](resblock.png)
 
 devlog:
-* errors in resnet class witht the inputs; input channels is weird and also wrong
-* current shape is 100, 224, 224, 3; it expects (64, 7, 7, 64) with O being at the end and I being the front
+* the shape after downsampling doesn't match the shape after the 2 conv layers (3x3 kernel, stride=2)
+* the shapes are (100, 14, 14, 128) for the convs (56 divided by 2 twice) and the sequential returns (100, 7, 7, 128)
 
 bugs:
-* an extra reshape inside the ``__call__`` messed the reshaping up
+* the input channel issue: an extra reshape inside the ``__call__`` messed the reshaping up
 
