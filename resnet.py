@@ -74,12 +74,12 @@ class ResBlock(nn.Module):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        print(f"First conv: {x.shape}")
+        # print(f"First conv: {x.shape}")
        
         # Second layer 
         x = self.conv2(x)
         x = self.bn2(x)
-        print(f"Second conv: {x.shape}")
+        # print(f"Second conv: {x.shape}")
 
         # Downsample?
         if self.downsample is not None:
@@ -140,7 +140,7 @@ class ResNet (nn.Module):
 
         for _ in range(1, blocks):
             layers.append(block(in_channels=self.in_channels, out_channels=out_channels, groups=self.groups, base_width=self.base_width, norm_layer=norm_layer))  # Use self.in_channels instead of out_channels
-        print(layers)
+        # print(layers)
         return nn.Sequential(*layers)
 
 
@@ -162,7 +162,10 @@ class ResNet (nn.Module):
         print(f"Exiting layer 4: {x.shape}")
 
         x = self.avgpool(x)
-        out  = self.fc(x)
+        print(f"Shape after pooling: {x.shape}")
+        x = mx.flatten(x, 1) # WEIRD LINE
+        out  = self.fc(x) 
+        print(f"final shape: {x.shape}")
 
         return out
 

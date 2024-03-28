@@ -24,9 +24,9 @@ This repo also serves as a devlog and notes.
 ![ResBlock](resblock.png)
 
 devlog:
-* the shape after downsampling doesn't match the shape after the 2 conv layers (3x3 kernel, stride=2)
-* the shapes are (100, 14, 14, 128) for the convs (56 divided by 2 twice) and the sequential returns (100, 7, 7, 128)
+* problem with getting the individual classifications, small issue
+* check line 166
 
 bugs:
 * the input channel issue: an extra reshape inside the ``__call__`` messed the reshaping up
-
+* residual operation shape issue bug: the stride was wrong, downsampled a bit too much
