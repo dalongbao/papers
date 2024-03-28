@@ -299,5 +299,5 @@ for i in range(no_epochs):
 		f" Time {toc - tic:.3f} (s)"
 	)
 
-resnet34.save_weights('resnet34') 
+resnet34.save_weights('resnet34.npz') 
 
