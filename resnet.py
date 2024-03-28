@@ -130,7 +130,7 @@ class ResNet (nn.Module):
 
         if stride != 1 or self.in_channels != out_channels * block.expansion:
             downsample = nn.Sequential(
-                    nn.Conv2d(in_channels=self.in_channels * stride, out_channels=out_channels * block.expansion, kernel_size=1, stride=stride),  
+                    nn.Conv2d(in_channels=self.in_channels * stride, out_channels=out_channels * block.expansion, kernel_size=1, stride=1),  
                     nn.BatchNorm(out_channels * block.expansion)
             )
 
@@ -155,8 +155,11 @@ class ResNet (nn.Module):
         x = self.layer1(x)
         print(f"Exiting layer 1: {x.shape}")
         x = self.layer2(x)
+        print(f"Exiting layer 2: {x.shape}")
         x = self.layer3(x)
+        print(f"Exiting layer 3: {x.shape}")
         x = self.layer4(x)
+        print(f"Exiting layer 4: {x.shape}")
 
         x = self.avgpool(x)
         out  = self.fc(x)
