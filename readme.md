@@ -14,9 +14,7 @@ This repo also serves as a devlog and notes.
 4. [Perceptron](#perceptron)
 
 ## Initialization
-'''
-pip install numpy mlx torch pandas matplotlib-pyplot 
-'''
+> pip install numpy mlx torch pandas matplotlib-pyplot 
 
 
 ## ResNet
