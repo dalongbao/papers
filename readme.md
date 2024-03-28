@@ -24,8 +24,8 @@ This repo also serves as a devlog and notes.
 ![ResBlock](resblock.png)
 
 devlog:
-* problem with getting the individual classifications, small issue
-* check line 166
+* changing 273 to mx.array, changing the effects afterward
+* making loss\_fn better
 
 bugs:
 * the input channel issue: an extra reshape inside the ``__call__`` messed the reshaping up

@@ -84,7 +84,7 @@ class ResBlock(nn.Module):
         # Downsample?
         if self.downsample is not None:
             cache = self.downsample(x)
-            print(f"Cache: {cache.shape}")
+            # print(f"Cache: {cache.shape}")
 
         x = mx.add(x, cache)
         out = self.relu(x)
@@ -121,7 +121,7 @@ class ResNet (nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
         self.avgpool = nn.AvgPool2d((1, 1))
-        self.fc = nn.Linear(input_dims=512*block.expansion, output_dims=num_classes)
+        self.fc = nn.Linear(input_dims=512*block.expansion, output_dims=1000)
 
     
     def _make_layer(self, block, out_channels, blocks, stride=1):
@@ -153,19 +153,18 @@ class ResNet (nn.Module):
         x = self.maxpool(x)
 
         x = self.layer1(x)
-        print(f"Exiting layer 1: {x.shape}")
+        # print(f"Exiting layer 1: {x.shape}")
         x = self.layer2(x)
-        print(f"Exiting layer 2: {x.shape}")
+        # print(f"Exiting layer 2: {x.shape}")
         x = self.layer3(x)
-        print(f"Exiting layer 3: {x.shape}")
+        # print(f"Exiting layer 3: {x.shape}")
         x = self.layer4(x)
-        print(f"Exiting layer 4: {x.shape}")
+        # print(f"Exiting layer 4: {x.shape}")
 
         x = self.avgpool(x)
-        print(f"Shape after pooling: {x.shape}")
-        x = mx.flatten(x, 1) # WEIRD LINE
+        # print(f"Shape after pooling: {x.shape}")
         out  = self.fc(x) 
-        print(f"final shape: {x.shape}")
+        # print(f"final shape: {x.shape}")
 
         return out
 
@@ -240,10 +239,14 @@ mx.eval(resnet34.parameters())
 
 # Optimizers, functions
 def loss_fn(model, X, y):
-    return mx.mean(nn.losses.cross_entropy(model(X), y))
+    logits = model(X).reshape(100, 1000)
+    y = mx.array(np.eye(1000)[y])
+    return mx.mean(nn.losses.cross_entropy(logits, y))
 
 def eval_fn(model, X, y):
-    return mx.mean(mx.argmax(model(X), axis=1) == y)
+    logits = model(X).reshape(100, 1000)
+    print(type(y))
+    return mx.mean(mx.argmax(logits, axis=1) == y)
 
 loss_and_grad_fn = nn.value_and_grad(resnet34, loss_fn)
 optimizer = SGD(lr, momentum, dr) 
@@ -268,7 +271,7 @@ def batch_iterate(batch_size, X, y):
     if len(X) % batch_size != 0:
         start = no_batches * batch_size
         ids = np.arange(start, len(X))
-        yield np.asarray([X[i] for i in ids]), np.array([y[i] for i in ids])
+        yield np.asarray([X[i] for i in ids]), np.array([y[i] for i in ids]) # can probably change this to mx.array later
 
         
 # Training loop
@@ -280,6 +283,7 @@ for i in range(no_epochs):
     preprocessed_train_images = np.stack([preprocess(image) for image in train_images])
 
     for X, y in batch_iterate(batch_size, preprocessed_train_images, train_labels):
+        y = mx.array(y)
         loss, grads = loss_and_grad_fn(resnet34, X, y)
         optimizer.update(resnet34, grads)
         mx.eval(resnet34.parameters(), optimizer.state)
@@ -287,11 +291,11 @@ for i in range(no_epochs):
     # Preprocess test images
     preprocessed_test_images = np.stack([preprocess(image) for image in test_images])
 
-    accuracy = eval_fn(resnet34, preprocessed_test_images, test_labels)
+    accuracy = eval_fn(resnet34, preprocessed_test_images, mx.array(test_labels))
     toc = time.perf_counter()
 
     print(
-		f"Epoch {e}: Test accuracy {accuracy.item():.3f},"
+		f"Epoch {i}: Test accuracy {accuracy.item():.3f},"
 		f" Time {toc - tic:.3f} (s)"
 	)
 
