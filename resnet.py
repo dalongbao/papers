@@ -177,12 +177,13 @@ Errors with loading the dataset; do i need to preprocess and reshape the data; i
 
 # Data preparation
 # If the dataset is gated/private, make sure you have run huggingface-cli login
-train_set = load_dataset("imagenet-1k", split='train[:100]')
+sample_size = 100
+train_set = load_dataset("imagenet-1k", split=f'train[:{sample_size}]')
 
 train_images = train_set['image']
 train_labels = train_set['label']
 
-test_set = load_dataset("imagenet-1k", split='test[:100]')
+test_set = load_dataset("imagenet-1k", split=f'test[:{sample_size}]')
 
 test_images = test_set['image']
 test_labels = test_set['label']
@@ -227,7 +228,7 @@ def preprocess(image):
 lr = 1e-1 # Learning rate
 momentum = 9e-1
 dr = 1e-4 # Decay rate 
-no_epochs = 5
+no_epochs = 100
 batch_size = 256
 layers = [3, 4, 6, 3]
 
@@ -238,14 +239,13 @@ mx.eval(resnet34.parameters())
 
 
 # Optimizers, functions
-def loss_fn(model, X, y):
-    logits = model(X).reshape(100, 1000)
+def loss_fn(model, X, y, batch_size):
+    logits = model(X).reshape(batch_size, 1000) # manually change this until i figure out how to
     y = mx.array(np.eye(1000)[y])
     return mx.mean(nn.losses.cross_entropy(logits, y))
 
-def eval_fn(model, X, y):
-    logits = model(X).reshape(100, 1000)
-    print(type(y))
+def eval_fn(model, X, y, sample_size):
+    logits = model(X).reshape(sample_size, 1000)
     return mx.mean(mx.argmax(logits, axis=1) == y)
 
 loss_and_grad_fn = nn.value_and_grad(resnet34, loss_fn)
@@ -266,12 +266,12 @@ def batch_iterate(batch_size, X, y):
         start = i * batch_size
         end = start + batch_size
         ids = np.arange(start, end) # ids is a list of indices
-        yield np.asarray([X[i] for i in ids]), np.array([y[i] for i in ids]) # Yield so it returns X, y but keeps looping
+        yield np.asarray([X[i] for i in ids]), np.array([y[i] for i in ids]), batch_size # Yield so it returns X, y but keeps looping
 
     if len(X) % batch_size != 0:
         start = no_batches * batch_size
         ids = np.arange(start, len(X))
-        yield np.asarray([X[i] for i in ids]), np.array([y[i] for i in ids]) # can probably change this to mx.array later
+        yield np.asarray([X[i] for i in ids]), np.array([y[i] for i in ids]), len(X) - start # can probably change this to mx.array later
 
         
 # Training loop
@@ -282,16 +282,16 @@ for i in range(no_epochs):
     # (sample_size, 224, 224, 3)
     preprocessed_train_images = np.stack([preprocess(image) for image in train_images])
 
-    for X, y in batch_iterate(batch_size, preprocessed_train_images, train_labels):
+    for X, y, b_size in batch_iterate(batch_size, preprocessed_train_images, train_labels):
         y = mx.array(y)
-        loss, grads = loss_and_grad_fn(resnet34, X, y)
+        loss, grads = loss_and_grad_fn(resnet34, X, y, b_size)
         optimizer.update(resnet34, grads)
         mx.eval(resnet34.parameters(), optimizer.state)
 
     # Preprocess test images
     preprocessed_test_images = np.stack([preprocess(image) for image in test_images])
 
-    accuracy = eval_fn(resnet34, preprocessed_test_images, mx.array(test_labels))
+    accuracy = eval_fn(resnet34, preprocessed_test_images, mx.array(test_labels), sample_size)
     toc = time.perf_counter()
 
     print(

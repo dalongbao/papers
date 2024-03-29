@@ -20,13 +20,14 @@ This repo also serves as a devlog and notes.
 ## ResNet
 * Residual network
 * Very vertical
+* First paper fully implemented by me from reading the paper!
 
 ![ResBlock](resblock.png)
 
-devlog:
+devlog/improvements:
 * changing 273 to mx.array, changing the effects afterward
-* making loss\_fn better
 
-bugs:
+Bug log:
 * the input channel issue: an extra reshape inside the ``__call__`` messed the reshaping up
 * residual operation shape issue bug: the stride was wrong, downsampled a bit too much
+* hard coded the batch\_size and matrix reshaping; changed it to the variable names and was fixed
