@@ -22,7 +22,7 @@ This repo also serves as a devlog and notes.
 * Very vertical
 * First paper fully implemented by me from reading the paper!
 
-![ResBlock](resblock.png)
+![ResBlock](/images/resblock.png)
 
 devlog/improvements:
 * changing 273 to mx.array, changing the effects afterward
