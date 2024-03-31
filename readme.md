@@ -24,8 +24,8 @@ This repo also serves as a devlog and notes.
 
 ![ResBlock](/images/resblock.png)
 
-devlog/improvements:
-* changing 273 to mx.array, changing the effects afterward
+Devlog/improvements:
+* change line 273 to mx.array, changing the effects afterward
 
 Bug log:
 * the input channel issue: an extra reshape inside the ``__call__`` messed the reshaping up

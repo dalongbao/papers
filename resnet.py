@@ -18,12 +18,7 @@ Notes:
     * Image is resized with its shorter size sampled in [256, 480] for scale augmentation 
     * Conv3-64 = 64 3x3 filters, resulting in 64 output features
     * SGD with batch size of 256
-    * Works with 3.12 but not 3.9
-Options:
-    1. Define each layer, then code a class that takes everything and chains them together
-    2. Define the blocks and forward in the class
-    3. NanoGPT it - component (layer), block, resnet
-Where do I pass in the hyperparameters? ResNetConfig()?
+    * Works with Python 3.12 but not 3.9
 Define:
     * No. layers: 34
     * Input size: 224x224 crop sampled from an image, per-pixel mean subtracted, color augementation
@@ -168,12 +163,6 @@ class ResNet (nn.Module):
 
         return out
 
-"""
-Work for tmr:
-    * figure out how to train the model; what's batch iterate and what do i do
-    * use gpu
-Errors with loading the dataset; do i need to preprocess and reshape the data; is the loop and batch_iterate even right?
-"""
 
 # Data preparation
 # If the dataset is gated/private, make sure you have run huggingface-cli login
@@ -187,18 +176,6 @@ test_set = load_dataset("imagenet-1k", split=f'test[:{sample_size}]')
 
 test_images = test_set['image']
 test_labels = test_set['label']
-
-# def preprocess(image):
-    # image.thumbnail((256, 256)) # Resize the image, probably unnecessary
-
-    # Crop 
-    # crop_size = 224
-    # left = random.randint(0, image.width - crop_size)
-    # right = left + crop_size
-    # top = random.randint(0, image.height - crop_size)
-    # bottom = top + crop_size
-    
-    # return image.crop((left, top, right, bottom))
 
 def preprocess(image):
     # Resize the image to the target size
