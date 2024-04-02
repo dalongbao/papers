@@ -14,7 +14,24 @@ This repo also serves as a devlog and notes.
 4. [Perceptron](#perceptron)
 
 ## Initialization
-> pip install numpy mlx torch pandas matplotlib-pyplot 
+```pip install numpy mlx torch pandas matplotlib-pyplot```
+
+Implementation queue:
+* 3DGS https://arxiv.org/pdf/2308.04079.pdf
+
+## 3DGS
+* 3D Gaussian splatting
+* Goal 1 is to have a navigatable 3d model/scene locally
+* Goal 2 is to upgrade it to 4d
+* Goal 3 is to find a way to make it fast
+
+### Further reading:
+* https://arxiv.org/pdf/2403.10242.pdf
+* https://arxiv.org/pdf/2312.09147.pdf
+* https://zouzx.github.io/TriplaneGaussian/
+* https://ericpenner.github.io/soft3d/
+* https://arxiv.org/pdf/2109.08857.pdf
+* https://arxiv.org/pdf/2310.08528.pdf
 
 
 ## ResNet
