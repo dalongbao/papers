@@ -57,5 +57,7 @@ class LeNet(nn.Module):
         
         return x
 
+model = LeNet()
 
+lr = 1e-1
 

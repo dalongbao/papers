@@ -217,7 +217,7 @@ mx.eval(resnet34.parameters())
 
 # Optimizers, functions
 def loss_fn(model, X, y, batch_size):
-    logits = model(X).reshape(batch_size, 1000) # manually change this until i figure out how to
+    logits = model(X).reshape(batch_size, 1000) 
     y = mx.array(np.eye(1000)[y])
     return mx.mean(nn.losses.cross_entropy(logits, y))
 
