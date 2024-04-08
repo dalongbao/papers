@@ -17,7 +17,11 @@ This repo also serves as a devlog and notes.
 ```pip install numpy mlx torch pandas matplotlib-pyplot```
 
 Implementation queue:
+* LeNet-5 http://vision.stanford.edu/cs598_spring07/papers/Lecun98.pdf
 * 3DGS https://arxiv.org/pdf/2308.04079.pdf
+
+## LeNet-5
+* MNIST recognition
 
 ## 3DGS
 * 3D Gaussian splatting
