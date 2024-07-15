@@ -35,7 +35,7 @@ class ResBlock(nn.Module):
     """
     Take the input, normal forward, recast input onto original
     y = F(x) + x where F(x) is the mapping function (wx + b)
-    """
+   """
     # i can write a block for each block, but the better option is to create layers based on the input parameters 
     # the no_blocks is variable but the interior structure of each layer is the same, except the no. channels
     # 
