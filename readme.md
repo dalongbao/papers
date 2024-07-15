@@ -1,18 +1,10 @@
 # Papers
 My implementations of the seminal papers of machine learning.
 
-**Table of Contents:**
-1. [Initialization](#initialization) 
-2. [ResNet](#resnet)
-3. [Random Forest](#random-forest)
-4. [Perceptron](#perceptron)
-
-## Initialization
-```pip install numpy mlx torch pandas matplotlib-pyplot```
-
 Implementation queue:
-* LeNet-5 http://vision.stanford.edu/cs598_spring07/papers/Lecun98.pdf
+* LeNet-5 http://vision.stanford.edu/cs598\_spring07/papers/Lecun98.pdf
 * 3DGS https://arxiv.org/pdf/2308.04079.pdf
+* LSTM (from scratch?)
 
 ## LeNet-5
 * MNIST recognition
@@ -31,11 +23,9 @@ Implementation queue:
 * https://arxiv.org/pdf/2109.08857.pdf
 * https://arxiv.org/pdf/2310.08528.pdf
 
-
 ## ResNet
 * Residual network
 * Very vertical
-* First paper fully implemented by me from reading the paper!
 
 ![ResBlock](/images/resblock.png)
 
