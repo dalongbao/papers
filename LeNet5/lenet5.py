@@ -4,7 +4,10 @@ import mlx.core as mx
 import mlx.optimizers as optim
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+import argparse
 import time
+import os
 
 """
 Structure:
@@ -27,40 +30,42 @@ Structure:
 class LeNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels=6, out_channels=6, kernel_size=5, padding=2)
-        self.sigmoid = nn.sigmoid()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, padding=2)
         self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
 
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=16, kernel_size=5)
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5)
         self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
 
-        self.flatten = mx.flatten()
+        self.conv3 = nn.Conv2d(in_channels=16, out_channels=120, kernel_size=5)
 
-        self.dense1 = nn.Linear(input_dims=400, output_dims=120)
-        self.dense2 = nn.Linear(input_dims=120, output_dims=84)
-        self.dense3 = nn.Linear(input_dims=84, output_dims=10)
+        self.dense1 = nn.Linear(input_dims=120, output_dims=84)
+        self.dense2 = nn.Linear(input_dims=84, output_dims=10)
+
+        self.tanh = nn.Tanh()
 
     def __call__(self, x):
-        x = self.conv_1(x)
-        x = self.sigmoid(x)
+        x = self.conv1(x)
+        x = self.tanh(x)
         x = self.pool1(x)
 
         x = self.conv2(x)
-        x = self.sigmoid(x)
+        x = self.tanh(x)
         x = self.pool2(x)
 
-        x = self.flatten(x)
+        x = self.conv3(x)
+        x = self.tanh(x)
+
+        x = mx.squeeze(x, (1, 2))
 
         x = self.dense1(x)
-        x = self.sigmoid(x)
+        x = self.tanh(x)
         x = self.dense2(x)
-        x = self.sigmoid(x)
-        x = self.dense3(x)
         
         return x
 
 def loss_fn(model, X, y):
-    return mx.mean(nn.losses.cross_entropy(model(X), y))
+    logits = model(X)
+    return mx.mean(nn.losses.cross_entropy(logits, y))
 
 def eval_fn(model, X, y):
     return mx.mean(mx.argmax(model(X), axis=1) == y)
@@ -78,23 +83,46 @@ def predict(model, image):
     predicted_class = mx.argmax(prediction, axis=1)
     return predicted_class.item()
 
+def load_data():
+    BASE_PATH = os.path.join(os.getcwd(), 'mnist/')
+
+    train = os.path.join(BASE_PATH, 'train.csv')
+    test = os.path.join(BASE_PATH, 'test.csv')
+
+    train = np.transpose(np.array(pd.read_csv(train)))
+    n, m = train.shape
+    train_images = np.reshape(np.transpose(train[1:n] / 255.), (-1, 28, 28))
+    train_labels = train[0]
+
+    test = np.transpose(np.array(pd.read_csv(test)))
+    i, h = test.shape
+    test_images = np.reshape(np.transpose(test[1:n] / 255.), (-1, 28, 28))
+    test_labels = test[0]
+
+    train_images = mx.expand_dims(mx.array(train_images), -1)
+    train_labels = mx.array(train_labels)
+    test_images = mx.expand_dims(mx.array(test_images), -1)
+    test_labels = mx.array(test_labels)
+
+    return train_images, train_labels, test_images, test_labels
+
 def main():
     model = LeNet()
     mx.eval(model.parameters())
 
-    lr = 1e-1
-    num_epochs = 10
+    lr = 1e-4
+    num_epochs = 100
 
-    # Load data here as train_images, train_data, val_images, val_data
+    train_images, train_labels, test_images, test_labels = load_data()
 
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
-    optimizer = optim.AdamW(learning_rate=lr)
+    optimizer = optim.SGD(learning_rate=lr, momentum=0.9)
 
-    for i in range(num_epochs):
+    for e in range(num_epochs):
         tic = time.perf_counter()
-        for X, y in batch_iterate(256, train_images, train_data):
+        for X, y in batch_iterate(32, train_images, train_labels):
             loss, grad = loss_and_grad_fn(model, X, y)
-            optimizer.update(model, grads)
+            optimizer.update(model, grad)
             mx.eval(model.parameters(), optimizer.state)
 
         accuracy = eval_fn(model, test_images, test_labels)
