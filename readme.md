@@ -2,7 +2,6 @@
 My implementations of the seminal papers of machine learning.
 
 Implementation queue:
-* LeNet-5 http://vision.stanford.edu/cs598\_spring07/papers/Lecun98.pdf
 * 3DGS https://arxiv.org/pdf/2308.04079.pdf
 * LSTM (from scratch?)
 
