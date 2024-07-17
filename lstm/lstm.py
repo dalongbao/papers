@@ -42,6 +42,8 @@ class LSTM(nn.Module):
     
 
     def __call__(self, x, prev_state):
+        if x.ndim == 1:
+            x = x.reshape(1, -1)
         c, h = prev_state
         x = mx.concatenate((h, x), axis=1) # first axis is usually batch size
 
@@ -50,8 +52,8 @@ class LSTM(nn.Module):
         g3 = self.tanh(self.W3(x))
         g4 = self.sigmoid(self.W4(x))
 
-        c_cur = mx.add(mx.matmul(c, g1), mx.matmul(g2, g3)) # this gets passed on
-        h_cur = mx.matmul(g4, self.tanh(c_cur)) # this also gets passed on
+        c_cur = mx.add(mx.multiply(c, g1), mx.multiply(g2, g3)) # this gets passed on
+        h_cur = mx.multiply(g4, self.tanh(c_cur)) # this also gets passed on
 
         return c_cur, h_cur 
 
@@ -60,7 +62,6 @@ class LSTMLayer(nn.Module):
         super().__init__()
         self.hidden_dims = hidden_dims
         self.cell = LSTM(input_dims, hidden_dims)
-        print(self.cell)
 
     def __call__(self, x):
         batch_size, seq_len = x.shape
@@ -91,4 +92,32 @@ class MLP(nn.Module):
         x = self.relu(x)
         return x
 
+class LSTMRNN(nn.Module):
+    def __init__(self, vocab_size: int, hidden_dims: int, num_layers: int): # add dropout later
+        super().__init__()
+        self.hidden_dims = hidden_dims
+        self.num_layers = num_layers
+    
+        self.embedding = nn.Embedding(vocab_size, hidden_dims)
+        self.layers = [LSTM(hidden_dims, hidden_dims) for _ in range(num_layers)]
+        self.fc = nn.Linear(hidden_dims, vocab_size)
+        
+    def __call__(self, x):
+        if x.ndim == 1:
+            x = x.reshape(1, -1)
 
+        batch_size, seq_len = x.shape # batch_size, seq_len, input_size
+        x = self.embedding(x)
+        h = [mx.zeros((batch_size, self.hidden_dims)) for _ in range(self.num_layers)]
+        c = [mx.zeros((batch_size, self.hidden_dims)) for _ in range(self.num_layers)]
+
+        outputs = []
+
+        for i in range(seq_len):
+            input_i = x[:, i, :]
+            for layer in range(self.num_layers):
+                c[layer], h[layer] = self.layers[layer](input_i, (c[layer], h[layer]))
+                input_i = h[layer]
+            outputs.append(h[-1])
+        x = self.fc(mx.array(outputs)) #self.fc(mx.stack(outputs, axis=1)[:, -1])
+        return x
