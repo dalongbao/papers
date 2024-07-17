@@ -30,15 +30,14 @@ what it does (in a single episode):
 
 class DQN(nn.Module):
     def __init__(self, input_dims: int, output_dims: int):
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=8, stride=4) # depends on the input, might change later
+        self.conv1 = nn.Conv2d(in_channels=input_dims, out_channels=16, kernel_size=8, stride=4) 
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2)
 
-        self.fc1 = nn.Linear(input_dims=512, output_dims=256)
-        self.fc2 = nn.Linear(input_dims=256, output_dims=output_dims) # depends on the no. actions available, we assume an arbitrary atari game so 4
+        self.fc1 = nn.Linear(input_dims=2592, output_dims=256)
+        self.fc2 = nn.Linear(input_dims=256, output_dims=output_dims) 
         self.relu = nn.ReLU()
 
     def __call__(self, x):
-        print(x.shape)
         x = self.conv1(x)
         x = self.relu(x)
 
@@ -63,7 +62,7 @@ class ReplayBuffer(object):
     def sample(self, batch_size: int):
         return random.sample(self.memory, batch_size)
 
-    def _len(self):
+    def len(self):
         return len(self.memory)
 
 
