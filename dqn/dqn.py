@@ -30,6 +30,7 @@ what it does (in a single episode):
 
 class DQN(nn.Module):
     def __init__(self, input_dims: int, output_dims: int):
+        super().__init__()
         self.conv1 = nn.Conv2d(in_channels=input_dims, out_channels=16, kernel_size=8, stride=4) 
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2)
 

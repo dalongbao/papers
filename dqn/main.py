@@ -72,7 +72,7 @@ Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'
 lr = 1e-4
 epoch = 100
 batch_size = 128
-discount = 0.9
+gamma = 0.9
 # include epsilon decay later - start, end, decay
 
 """Rest of the model"""
@@ -99,17 +99,18 @@ def optimize():
     reward_batch = mx.array(batch.reward)
 
     non_final_mask = mx.array([s is not None for s in batch.next_state], dtype=mx.bool_)
-    non_final_next_states = mx.array([s for s in batch.next_state if s is not None]).squeeze(1)
+    next_states = mx.array(np.array(batch.next_state), dtype=mx.float32).squeeze(1)
 
     state_action_values = model(state_batch).squeeze()[mx.arange(batch_size), action_batch]
 
     # Computing the predictions
     next_state_values = mx.zeros(batch_size)
-    print(non_final_next_states.shape)
-    print(non_final_mask.shape)
-    if len(non_final_next_states) > 0:
-        next_state_values[non_final_mask] = mx.max(model(non_final_next_states), axis=1)
-
+    if non_final_mask.sum() > 0:  # Check if there are any non-final states
+        next_state_values = mx.where(
+            non_final_mask,
+            mx.max(model(next_states), axis=1),
+            next_state_values
+        )
     expected_state_action_values = (next_state_values * gamma) + reward_batch
 
     loss, grad = loss_and_grad_fn(state_action_values, expected_state_action_values)  
@@ -127,8 +128,6 @@ q value is given by bellman, of course
 so right now it's being sampled in two places - the optimization and the generation
 
 during the transitions it takes input of 1, 84, 84, 4; during optimize it takes 128, 84, 84, 4
-
-
 """
 
 warmup_steps = batch_size
@@ -161,7 +160,6 @@ for e in range(epoch):
             loss = optimize()
             if loss is not None:
                 losses.append(loss)
-                counter += 1
 
         if done:
             break
