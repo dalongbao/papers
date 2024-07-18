@@ -36,15 +36,20 @@ class DQN(nn.Module):
         self.fc1 = nn.Linear(input_dims=2592, output_dims=256)
         self.fc2 = nn.Linear(input_dims=256, output_dims=output_dims) 
         self.relu = nn.ReLU()
+        self.count = 0
 
     def __call__(self, x):
+        self.count += 1
+        if x.ndim == 5:
+            x = x.squeeze(1)
         x = self.conv1(x)
         x = self.relu(x)
 
         x = self.conv2(x)
         x = self.relu(x)
 
-        x = mx.flatten(x)
+        # x = mx.flatten(x)
+        x = mx.reshape(x, (x.shape[0], -1))
 
         x = self.fc1(x)
         x = self.fc2(x)

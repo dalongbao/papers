@@ -94,17 +94,19 @@ def optimize():
     transitions = memory.sample(batch_size)
     batch = Transition(*zip(*transitions))
 
-    state_batch = mx.array(batch.state)
+    state_batch = mx.array(batch.state).squeeze(1)
     action_batch = mx.array(batch.action)
     reward_batch = mx.array(batch.reward)
 
     non_final_mask = mx.array([s is not None for s in batch.next_state], dtype=mx.bool_)
-    non_final_next_states = mx.array([s for s in batch.next_state if s is not None])
+    non_final_next_states = mx.array([s for s in batch.next_state if s is not None]).squeeze(1)
 
     state_action_values = model(state_batch).squeeze()[mx.arange(batch_size), action_batch]
 
     # Computing the predictions
     next_state_values = mx.zeros(batch_size)
+    print(non_final_next_states.shape)
+    print(non_final_mask.shape)
     if len(non_final_next_states) > 0:
         next_state_values[non_final_mask] = mx.max(model(non_final_next_states), axis=1)
 
@@ -113,7 +115,6 @@ def optimize():
     loss, grad = loss_and_grad_fn(state_action_values, expected_state_action_values)  
     optimizer.update(model, grad)
     mx.eval(model.parameters(), optimizer.state)
-    print(loss)
 
     return loss.item()
 
@@ -122,20 +123,29 @@ for final states return the immediate reward
 for non-terminal states return the reward + discounted q value of next state
 
 q value is given by bellman, of course
+
+so right now it's being sampled in two places - the optimization and the generation
+
+during the transitions it takes input of 1, 84, 84, 4; during optimize it takes 128, 84, 84, 4
+
+
 """
+
+warmup_steps = batch_size
 
 for e in range(epoch): 
     tic = time.perf_counter()
     state, info = env.reset()
     state = mx.array(np.array(state), dtype=mx.float32).transpose(3, 1, 2, 0)
 
-    losses = 0
-    counter = 0
+    losses = []
+    episode_reward = 0
 
     for c in count():
         action = model(state).argmax()
         observation, reward, terminated, truncated, _ = env.step(action.item())
         reward = mx.array([reward])
+        episode_reward += reward.item()
         done = terminated or truncated
 
         if terminated:
@@ -147,14 +157,16 @@ for e in range(epoch):
 
         state = next_state
 
-        loss = optimize()
-#        losses += loss
-        counter += 1
+        if c >= warmup_steps:
+            loss = optimize()
+            if loss is not None:
+                losses.append(loss)
+                counter += 1
 
         if done:
             break
     
     toc = time.perf_counter()
-    print(f'Episode: {e} | Average Loss: {(losses / counter):.3f} | Time: {(toc - tic):.3f}')
+    print(f'Episode: {e} | Average Loss: {(np.mean(losses)):.3f} | Time: {(toc - tic):.3f}')
 
 print('Complete')
