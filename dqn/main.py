@@ -58,7 +58,7 @@ class AtariPreprocessing(gym.Wrapper):
         
         return cropped
 
-env = gym.make('ALE/Breakout-v5') # make grayscale later
+env = gym.make('ALE/Breakout-v5', render_mode='human') # make grayscale later
 env = AtariPreprocessing(env, frame_size=(84, 84))
 env = FrameStack(env, num_stack=4)
 n_actions = env.action_space.n # output_dims
@@ -70,8 +70,8 @@ Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'
 
 """Hyperparameters"""
 lr = 1e-4
-epoch = 100
-batch_size = 128
+epoch = 10
+batch_size = 3
 gamma = 0.9
 # include epsilon decay later - start, end, decay
 
@@ -128,10 +128,11 @@ q value is given by bellman, of course
 so right now it's being sampled in two places - the optimization and the generation
 
 during the transitions it takes input of 1, 84, 84, 4; during optimize it takes 128, 84, 84, 4
+
+issue is that it's not shooting/moving/maximizing score
 """
-
+print('starting training...')
 warmup_steps = batch_size
-
 for e in range(epoch): 
     tic = time.perf_counter()
     state, info = env.reset()
@@ -162,6 +163,7 @@ for e in range(epoch):
                 losses.append(loss)
 
         if done:
+            print('died')
             break
     
     toc = time.perf_counter()

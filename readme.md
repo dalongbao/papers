@@ -5,6 +5,10 @@ Implementation queue:
 * 3DGS https://arxiv.org/pdf/2308.04079.pdf
 * LSTM (from scratch?)
 
+Notes:
+* Can kinda classify models into rnns, cnns, encoder/decoder (and their permutations), ssms, mlps, transformers
+* and for diffusion and RL the policies/loss functions/optimization is pretty different to the others so they belong in another category too
+
 ## LeNet-5
 * MNIST recognition
 
