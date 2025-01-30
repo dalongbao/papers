@@ -178,3 +178,6 @@ mnist
 env/
 .DS_Store
 data
+ckpts
+ckpt
+*.pt

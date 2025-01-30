@@ -1,0 +1,117 @@
+import torch
+from torchvision import transforms
+import torchvision.datasets as datasets
+from torchvision.transforms import ToTensor
+from pathlib import Path
+
+train_transform = transforms.Compose([
+    transforms.RandomResizedCrop(224),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
+                       std=[0.2675, 0.2565, 0.2761])
+])
+
+test_transform = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
+                       std=[0.2675, 0.2565, 0.2761])
+])
+
+def save_checkpoint(model, optimizer, scheduler, epoch, loss, accuracy, filename):
+    """
+    Save model checkpoint with all training state.
+    
+    Args:
+        model: Model instance
+        optimizer: Optimizer instance 
+        scheduler: Learning rate scheduler
+        epoch (int): Current epoch number
+        loss (float): Current loss value
+        accuracy (float): Current accuracy value
+        filename (str): Name of checkpoint file
+    """
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'loss': loss,
+        'accuracy': accuracy,
+        'config': model.config
+    }
+    
+    save_path = Path(checkpoint_dir) / filename
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(checkpoint, save_path)
+
+def load_checkpoint(model, optimizer, scheduler, filename):
+    """
+    Load model checkpoint and restore training state.
+    
+    Args:
+        model: Model instance to restore
+        optimizer: Optimizer instance to restore
+        scheduler: Learning rate scheduler to restore
+        filename (str): Name of checkpoint file
+        
+    Returns:
+        tuple: (epoch, loss, accuracy)
+    """
+    load_path = Path(checkpoint_dir) / filename
+    if not load_path.exists():
+        raise FileNotFoundError(f"No checkpoint found at {load_path}")
+        
+    checkpoint = torch.load(load_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    
+    return checkpoint['epoch'], checkpoint['loss'], checkpoint['accuracy']
+
+def get_dataset(dataset='cifar10'):
+    """
+    Get training and test datasets.
+    
+    Args:
+        dataset (str): Name of dataset ('cifar10', 'cifar100', 'mnist', 
+                      'fashionmnist', 'imagenet')
+    
+    Returns:
+        tuple: (training_dataset, test_dataset)
+        
+    Raises:
+        ValueError: If dataset is not supported
+    """
+    dataset_map = {
+        'cifar10': datasets.CIFAR10,
+        'cifar100': datasets.CIFAR100,
+        'mnist': datasets.MNIST,
+        'fashionmnist': datasets.FashionMNIST,
+        'imagenet': datasets.ImageNet
+    }
+    
+    dataset = dataset.lower()
+    if dataset not in dataset_map:
+        raise ValueError(f"Dataset {dataset} not supported. Choose from {list(dataset_map.keys())}")
+    
+    DatasetClass = dataset_map[dataset]
+    data_dir = Path("../data") / dataset
+    
+    training_data = DatasetClass(
+        root=str(data_dir),
+        train=True,
+        download=True,
+        transform=train_transform
+    )
+    
+    test_data = DatasetClass(
+        root=str(data_dir),
+        train=False,
+        download=True,
+        transform=test_transform
+    )
+    
+    return training_data, test_data

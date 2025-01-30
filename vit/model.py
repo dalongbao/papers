@@ -120,6 +120,7 @@ class Rearrange(nn.Module):
 class ViT(nn.Module):
     def __init__(self, config: ViTConfig):
         super().__init__()
+        self.config = config
         image_width, image_height = config.image_size
         patch_width, patch_height = config.patch_size
 

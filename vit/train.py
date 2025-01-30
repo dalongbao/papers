@@ -4,7 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import torchvision
-from torchvision import datasets
+from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 
 import os
@@ -12,73 +12,61 @@ from pathlib import Path
 import math
 import numpy as np
 
+from utils import save_checkpoint, load_checkpoint, get_dataset
 from model import ViT, ViTConfig
 
-def save_checkpoint(model, optimizer, epoch, loss, accuracy, filename):
-    checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'loss': loss,
-        'accuracy': accuracy,
-        'config': model.config  
-    }
-    torch.save(checkpoint, checkpoint_dir / filename)
-
-def load_checkpoint(model, optimizer, filename):
-    checkpoint = torch.load(checkpoint_dir / filename)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    return checkpoint['epoch'], checkpoint['loss'], checkpoint['accuracy']
-
+dataset = 'cifar100'
 checkpoint_dir = Path('./ckpts')
 checkpoint_dir.mkdir(exist_ok=True)
 
-training_data = datasets.CIFAR10(
-    root="../data/cifar10",
-    train=True,
-    download=True,
-    transform=ToTensor()
-)
-
-test_data = datasets.CIFAR10(
-    root="../data/cifar10",
-    train=False,
-    download=True,
-    transform=ToTensor()
-)
-
-num_epochs = 10
-eval_iter = 1
-batch_size = 32
-learning_rate = 1e-4
+num_epochs = 300
+eval_iter = 20
+save_iter = 20
+batch_size = 128 # GPU mem / (4 * input tensor size * no. parameters) 
+num_workers = 2
+learning_rate = 3e-3 * (256/4096) 
 betas = (0.9, 0.999)
 eps = 1e-8
-weight_decay = 0.01
-best_accuracy = 0.0
+weight_decay = 0.3 
+warmup_steps = 10000 * (256/4096) 
+grad_clip = 1.0
+gradient_accumulation_steps = 8
+
+image_size = (224, 224)
+patch_size = (16, 16)
+num_classes = 100
+dim = 512
+dim_head = 64
+depth = 12
+num_heads = 8
+hidden_dim = 2048
+channels = 3
+dropout = 0.1
 
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu'
 print(f"using device: {device}")
-print(torch.version.cuda)
+print(f"using cuda version: {torch.version.cuda}" if torch.cuda.is_available() else "")
+
+training_data, test_data = get_dataset(dataset)
 
 config = ViTConfig(
-    image_size=(32, 32),
-    patch_size=(16, 16),
-    num_classes=10,
-    dim=768,
-    dim_head=64,
-    depth=8,
-    num_heads=8,
-    hidden_dim=3072,
-    channels=3,
+    image_size=image_size,
+    patch_size=patch_size,
+    num_classes=num_classes,
+    dim=dim,
+    dim_head=dim_head,
+    depth=depth,
+    num_heads=num_heads,
+    hidden_dim=hidden_dim,
+    channels=channels,
     pool='cls',
-    dropout=0.,
-    emb_dropout=0.
+    dropout=dropout,
+    emb_dropout=dropout
 )
 
 model = ViT(config)
 model = model.to(device)
-model.eval()
+model = torch.compile(model)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.AdamW(
@@ -89,8 +77,14 @@ optimizer = optim.AdamW(
     weight_decay=weight_decay
 )
 
-train_dataloader = DataLoader(training_data, batch_size=batch_size)
-test_dataloader = DataLoader(test_data, batch_size=batch_size)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    optimizer,
+    T_max=num_epochs,
+    eta_min=1e-6
+)
+
+train_dataloader = DataLoader(training_data, batch_size=batch_size, num_workers=num_workers)
+test_dataloader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
 start_epoch = 0
 best_accuracy = 0.0
@@ -99,32 +93,40 @@ best_model_file = checkpoint_dir / "best.pt"
 
 if checkpoint_file.exists():
     print(f"Loading checkpoint from {checkpoint_file}")
-    start_epoch, _, best_accuracy = load_checkpoint(model, optimizer, "latest.pt")
+    start_epoch, _, best_accuracy = load_checkpoint(model, optimizer, scheduler, "latest.pt")
     print(f"Resuming from epoch {start_epoch} with best accuracy {best_accuracy:.2f}%")
 
+print("Starting training...")
 for epoch in range(start_epoch, num_epochs):
-    print(f"Epoch {epoch+1}\n-------------------------------")
     model.train()
     size = len(training_data)
+    running_loss = 0.0
 
     for batch, (X, y) in enumerate(train_dataloader):
         X, y = X.to(device), y.to(device)
         pred = model(X)
-        loss = criterion(pred, y)
+        loss = criterion(pred, y) / gradient_accumulation_steps
         loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+        running_loss += loss.item() * gradient_accumulation_steps
 
-        if batch % 1 == 0:
-            loss, current = loss.item(), batch * batch_size + len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        if (batch + 1) % gradient_accumulation_steps == 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            optimizer.step()
+            optimizer.zero_grad()
+
+            if batch % (gradient_accumulation_steps * 10) == 0:
+                current = (batch + 1) * X.shape[0]
+                print(f"loss: {running_loss/10:>7f}  [{current:>5d}/{size:>5d}]")
+                running_loss = 0.0
+
+        scheduler.step()
 
     if epoch % eval_iter == 0:
         model.eval()
         with torch.no_grad():
             size = len(test_data)
             num_batches = len(test_dataloader)
-            test_loss, acc = 0.0
+            test_loss, acc = 0.0, 0.0
 
             for X, y in test_dataloader:
                 X, y = X.to(device), y.to(device)
@@ -133,30 +135,26 @@ for epoch in range(start_epoch, num_epochs):
                 test_loss += criterion(pred, y).item()
                 acc += (pred.argmax(1) == y).type(torch.float).sum().item()
                     
-            test_loss /= num_batches
-            acc /= size
-            print(f"Test Error: \n Accuracy: {(100*acc):>0.1f}%, Avg loss: {test_loss:>8f} \n") 
-        
-        save_checkpoint(
-            model, 
-            optimizer, 
-            epoch + 1, 
-            test_loss, 
-            accuracy, 
-            "latest.pt"
-        )
+        test_loss /= num_batches
+        acc /= size
+        print(f"Epoch: {epoch} | Accuracy: {acc:.3f} | Avg loss: {test_loss:.3f}") 
+       
 
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
+        if epoch % save_iter == 0:
             save_checkpoint(
-                model,
-                optimizer,
-                epoch + 1,
-                test_loss,
-                accuracy,
-                "best.pt"
+                model, optimizer, scheduler,
+                epoch + 1, test_loss, acc,
+                "latest.pt"
             )
-            print(f"New best model saved with accuracy: {accuracy:.2f}%")
+            
+            if acc > best_accuracy:
+                best_accuracy = acc
+                save_checkpoint(
+                    model, optimizer, scheduler,
+                    epoch + 1, test_loss, acc,
+                    "best.pt"
+                )
+                print(f"New best model saved with accuracy: {acc:.3f}")
 
 print("Training completed!")
 print(f"Best accuracy: {best_accuracy:.2f}%")
