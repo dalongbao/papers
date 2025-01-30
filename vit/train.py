@@ -59,6 +59,7 @@ best_accuracy = 0.0
 
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu'
 print(f"using device: {device}")
+print(torch.version.cuda)
 
 config = ViTConfig(
     image_size=(32, 32),

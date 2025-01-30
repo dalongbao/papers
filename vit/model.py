@@ -26,12 +26,12 @@ class MHSA(nn.Module):
         self.scale = dim_head ** -0.5
 
         self.ln = nn.LayerNorm(dim)
-        self.to_qkv = nn.Linear(dim, 3 * inner_dim, bias=bias)
+        self.to_qkv = nn.Linear(dim, 3 * self.inner_dim)
         self.attn = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
 
         self.out_proj = nn.Sequential(
-            nn.Linear(inner_dim, dim, bias=bias),
+            nn.Linear(self.inner_dim, dim),
             nn.Dropout(dropout)
         )
 
@@ -45,7 +45,9 @@ class MHSA(nn.Module):
         attn = self.attn(qk)
         attn = self.dropout(attn)
 
-        out = einsum(qk, v, "b h a b, b h b d -> b a (h d)") 
+        # out = einsum(qk, v, "b h a b, b h b d -> b a (h d)") 
+        out = torch.matmul(attn, v)
+        out = rearrange(out, 'b h n d -> b n (h d)')
         out = self.out_proj(out)
         
         return out
@@ -53,12 +55,12 @@ class MHSA(nn.Module):
 
 class MLP(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, dropout: float = 0.):
-        super.__init__()
+        super().__init__()
 
         self.ffn = nn.Sequential(
             nn.LayerNorm(dim),
             nn.Linear(dim, hidden_dim),
-            nn.GeLU(),
+            nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, dim),
             nn.Dropout(dropout),
@@ -78,12 +80,13 @@ class Transformer(nn.Module):
         dim_head: int = 64,
         dropout: float = 0., 
     ):
-        self.norm = nn.LayerNorm(dim)
+        super().__init__()
+        self.ln = nn.LayerNorm(dim)
         self.layers = nn.ModuleList([])
 
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                MHSA(dim, head, num_heads, dim_head, dropout),
+                MHSA(dim, num_heads, dim_head, dropout),
                 MLP(dim, hidden_dim, dropout)
             ]))
 
@@ -110,6 +113,9 @@ class ViTConfig():
     dropout: float = 0.
     emb_dropout: float = 0.
 
+class Rearrange(nn.Module):
+    def forward(self, x):
+        return rearrange(x, 'b c h w -> b (h w) c')
 
 class ViT(nn.Module):
     def __init__(self, config: ViTConfig):
@@ -126,7 +132,7 @@ class ViT(nn.Module):
                 kernel_size=config.patch_size, 
                 stride=config.patch_size
             ),
-            Rearrange('b c h w -> b (h w) c'),
+            Rearrange(),
             nn.LayerNorm(config.dim)
         )
 
