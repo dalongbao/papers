@@ -1,8 +1,0 @@
-{
-	"name": "BitSIG",
-	"description": "BitSIG is a Special Interest Group focused on operating systems, computer networks, computer architecture, parallel and distributed systems. If you are passionate about these topics, whenever you are an expert or a beginner, this will be the perfect space for you! Join our events including workshops, talks, papers reading sessions.",
-	"logo": "the bitsig logo",
-	"logo-roundness": "not round, it has white background so it blends into the background color anyway",
-	"background-color": "#FFFFFF",
-	"website-url": "we don't have one yet, so use the discord link https://discord.gg/FQuQZHnx4r" 
-}
