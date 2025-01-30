@@ -4,6 +4,9 @@ import torchvision.datasets as datasets
 from torchvision.transforms import ToTensor
 from pathlib import Path
 
+checkpoint_dir = Path('./ckpts')
+checkpoint_dir.mkdir(exist_ok=True)
+
 train_transform = transforms.Compose([
     transforms.RandomResizedCrop(224),
     transforms.RandomHorizontalFlip(),

@@ -19,10 +19,10 @@ dataset = 'cifar100'
 checkpoint_dir = Path('./ckpts')
 checkpoint_dir.mkdir(exist_ok=True)
 
-num_epochs = 300
+num_epochs = 2400
 eval_iter = 20
 save_iter = 20
-batch_size = 128 # GPU mem / (4 * input tensor size * no. parameters) 
+batch_size = 64 # GPU mem / (4 * input tensor size * no. parameters) 
 num_workers = 2
 learning_rate = 3e-3 * (256/4096) 
 betas = (0.9, 0.999)
@@ -119,7 +119,7 @@ for epoch in range(start_epoch, num_epochs):
                 print(f"loss: {running_loss/10:>7f}  [{current:>5d}/{size:>5d}]")
                 running_loss = 0.0
 
-        scheduler.step()
+    scheduler.step()
 
     if epoch % eval_iter == 0:
         model.eval()
