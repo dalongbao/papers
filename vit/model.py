@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
+from dataclasses import dataclass
 from einops import rearrange, repeat, einsum
 from typing import Tuple
 
@@ -94,46 +95,55 @@ class Transformer(nn.Module):
         x = self.ln(x)
         return x
 
+@dataclass
+class ViTConfig():
+    image_size: Tuple[int, int]
+    patch_size: Tuple[int, int]
+    num_classes: int
+    dim: int
+    dim_head: int
+    depth: int
+    num_heads: int
+    hidden_dim: int
+    channels: int
+    pool: str = 'cls'
+    dropout: float = 0.
+    emb_dropout: float = 0.
+
+
 class ViT(nn.Module):
-    def __init__(
-        self, 
-        image_size: Tuple[int, int],
-        patch_size: Tuple[int, int],
-        num_classes: int,
-        dim: int,
-        dim_head: int,
-        depth: int,
-        num_heads: int,
-        hidden_dim: int,
-        channels: int,
-        pool = 'cls',
-        dropout: float = 0.,
-        emb_dropout: float = 0.
-    ):
+    def __init__(self, config: ViTConfig):
         super().__init__()
-
-        """
-        patchify image, patch embeddings
-        """
-
-        image_width, image_height = image_size
-        patch_width, patch_height = patch_size
+        image_width, image_height = config.image_size
+        patch_width, patch_height = config.patch_size
 
         num_patches = (image_height // patch_height) * (image_width // patch_width)
 
         self.patchify = nn.Sequential(
-            nn.Conv2d(in_channels=channels, out_channels=dim, kernel_size=patch_size, stride=patch_size),
+            nn.Conv2d(
+                in_channels=config.channels, 
+                out_channels=config.dim, 
+                kernel_size=config.patch_size, 
+                stride=config.patch_size
+            ),
             Rearrange('b c h w -> b (h w) c'),
-            nn.LayerNorm(dim)
+            nn.LayerNorm(config.dim)
         )
 
-        self.pool = pool
-        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
-        self.pe = nn.Parameter(torch.randn(1, num_patches + 1, dim))
-        self.dropout = nn.Dropout(dropout)
+        self.pool = config.pool
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.dim))
+        self.pe = nn.Parameter(torch.randn(1, num_patches + 1, config.dim))
+        self.dropout = nn.Dropout(config.dropout)
 
-        self.transformer = Transformer(dim, hidden_dim, depth, num_heads, dim_head, dropout)
-        self.mlp = nn.Linear(dim, num_classes)
+        self.transformer = Transformer(
+            config.dim, 
+            config.hidden_dim, 
+            config.depth, 
+            config.num_heads, 
+            config.dim_head, 
+            config.dropout
+        )
+        self.mlp = nn.Linear(config.dim, config.num_classes)
 
     def forward(self, x):
         x = self.patchify(x)
