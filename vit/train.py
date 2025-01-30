@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import torchvision
+from torchvision import datasets
 from torchvision.transforms import ToTensor
 
 import os
