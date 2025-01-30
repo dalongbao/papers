@@ -13,7 +13,7 @@ import time
 import numpy as np
 from pathlib import Path
 
-from utils import save_checkpoint, load_checkpoint, get_dataset, get_time
+from utils import save_checkpoint, load_checkpoint, get_dataset
 from model import ViT, ViTConfig
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,expandable_segments:True'
