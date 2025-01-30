@@ -8,12 +8,15 @@ from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 
 import os
-from pathlib import Path
 import math
+import time
 import numpy as np
+from pathlib import Path
 
-from utils import save_checkpoint, load_checkpoint, get_dataset
+from utils import save_checkpoint, load_checkpoint, get_dataset, get_time
 from model import ViT, ViTConfig
+
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,expandable_segments:True'
 
 dataset = 'cifar100'
 checkpoint_dir = Path('./ckpts')
@@ -96,28 +99,22 @@ if checkpoint_file.exists():
     start_epoch, _, best_accuracy = load_checkpoint(model, optimizer, scheduler, "latest.pt")
     print(f"Resuming from epoch {start_epoch} with best accuracy {best_accuracy:.2f}%")
 
+t0 = time.time()
 print("Starting training...")
 for epoch in range(start_epoch, num_epochs):
     model.train()
     size = len(training_data)
-    running_loss = 0.0
 
     for batch, (X, y) in enumerate(train_dataloader):
         X, y = X.to(device), y.to(device)
         pred = model(X)
         loss = criterion(pred, y) / gradient_accumulation_steps
         loss.backward()
-        running_loss += loss.item() * gradient_accumulation_steps
 
         if (batch + 1) % gradient_accumulation_steps == 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
             optimizer.zero_grad()
-
-            if batch % (gradient_accumulation_steps * 10) == 0:
-                current = (batch + 1) * X.shape[0]
-                print(f"loss: {running_loss/10:>7f}  [{current:>5d}/{size:>5d}]")
-                running_loss = 0.0
 
     scheduler.step()
 
@@ -137,7 +134,10 @@ for epoch in range(start_epoch, num_epochs):
                     
         test_loss /= num_batches
         acc /= size
-        print(f"Epoch: {epoch} | Accuracy: {acc:.3f} | Avg loss: {test_loss:.3f}") 
+        t1 = time.time()
+        dt = t1 - t0
+        t0 = t1
+        print(f"Epoch: {epoch} | Accuracy: {acc:.3f} | Avg loss: {test_loss:.3f} | Time taken: {dt*1000:.2f}ms") 
        
 
         if epoch % save_iter == 0:
