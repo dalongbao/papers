@@ -18,7 +18,7 @@ from model import ViT, ViTConfig
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,expandable_segments:True'
 
-dataset = 'cifar100'
+dataset = 'imagenet'
 checkpoint_dir = Path('./ckpts')
 checkpoint_dir.mkdir(exist_ok=True)
 
@@ -39,11 +39,11 @@ continue_training = False
 image_size = (224, 224)
 patch_size = (16, 16)
 num_classes = 100
-dim = 512
+dim = 768
 dim_head = 64
 depth = 12
-num_heads = 8
-hidden_dim = 2048
+num_heads = 12
+hidden_dim = 3072
 channels = 3
 dropout = 0.1
 
@@ -53,6 +53,7 @@ print(f"using cuda version: {torch.version.cuda}" if torch.cuda.is_available() e
 
 training_data, test_data = get_dataset(dataset)
 
+# ViT-Base/16 (16 x 16 patches)
 config = ViTConfig(
     image_size=image_size,
     patch_size=patch_size,
