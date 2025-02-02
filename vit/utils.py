@@ -24,14 +24,13 @@ test_transform = transforms.Compose([
                        std=[0.2675, 0.2565, 0.2761])
 ])
 
-def save_checkpoint(model, optimizer, scheduler, epoch, loss, accuracy, filename):
+def save_checkpoint(model, optimizer, epoch, loss, accuracy, filename):
     """
     Save model checkpoint with all training state.
     
     Args:
         model: Model instance
         optimizer: Optimizer instance 
-        scheduler: Learning rate scheduler
         epoch (int): Current epoch number
         loss (float): Current loss value
         accuracy (float): Current accuracy value
@@ -41,7 +40,6 @@ def save_checkpoint(model, optimizer, scheduler, epoch, loss, accuracy, filename
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
         'loss': loss,
         'accuracy': accuracy,
         'config': model.config
@@ -51,14 +49,13 @@ def save_checkpoint(model, optimizer, scheduler, epoch, loss, accuracy, filename
     save_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(checkpoint, save_path)
 
-def load_checkpoint(model, optimizer, scheduler, filename):
+def load_checkpoint(model, optimizer, filename):
     """
     Load model checkpoint and restore training state.
     
     Args:
         model: Model instance to restore
         optimizer: Optimizer instance to restore
-        scheduler: Learning rate scheduler to restore
         filename (str): Name of checkpoint file
         
     Returns:
@@ -71,7 +68,6 @@ def load_checkpoint(model, optimizer, scheduler, filename):
     checkpoint = torch.load(load_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     
     return checkpoint['epoch'], checkpoint['loss'], checkpoint['accuracy']
 
@@ -142,6 +138,5 @@ def get_dataset(dataset='cifar10'):
                 transforms.ToTensor(),
                 normalize,
             ]))
-
     
     return training_data, test_data

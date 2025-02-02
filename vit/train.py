@@ -7,6 +7,9 @@ import torchvision
 from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 
+from tqdm import tqdm
+import torch.cuda.amp as amp
+
 import os
 import math
 import time
@@ -21,24 +24,28 @@ os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,expandable_segmen
 dataset = 'imagenet'
 checkpoint_dir = Path('./ckpts')
 checkpoint_dir.mkdir(exist_ok=True)
+print(f"using dataset {dataset}")
 
-num_epochs = 2400
+num_epochs = 4800
 eval_iter = 20
 save_iter = 20
-batch_size = 64 # GPU mem / (4 * input tensor size * no. parameters) 
+batch_size = 32 # GPU mem / (4 * input tensor size * no. parameters) 
 num_workers = 2
 learning_rate = 3e-3 * (256/4096) 
 betas = (0.9, 0.999)
 eps = 1e-8
 weight_decay = 0.3 
-warmup_steps = 10000 * (256/4096) 
+decay_lr = True
+lr_decay_iters = 600000 # revisit
+min_lr = 6e-5 # revisit
+warmup_iters = 10000 * (256/4096) 
 grad_clip = 1.0
 gradient_accumulation_steps = 8
 continue_training = False
 
 image_size = (224, 224)
 patch_size = (16, 16)
-num_classes = 100
+num_classes = 1000
 dim = 768
 dim_head = 64
 depth = 12
@@ -82,14 +89,30 @@ optimizer = optim.AdamW(
     weight_decay=weight_decay
 )
 
-scheduler = optim.lr_scheduler.CosineAnnealingLR(
-    optimizer,
-    T_max=num_epochs,
-    eta_min=1e-6
-)
+# scheduler = optim.lr_scheduler.CosineAnnealingLR(
+#     optimizer,
+#     T_max=num_epochs,
+#     eta_min=1e-6
+# )
 
-train_dataloader = DataLoader(training_data, batch_size=batch_size, num_workers=num_workers)
-test_dataloader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
+scaler = amp.GradScaler()
+
+# poor man's warmup + scheduler, taken directly from nanoGPT
+def get_lr(it):
+    # 1) linear warmup for warmup_iters steps
+    if it < warmup_iters:
+        return learning_rate * (it + 1) / (warmup_iters + 1)
+    # 2) if it > lr_decay_iters, return min learning rate
+    if it > lr_decay_iters:
+        return min_lr
+    # 3) in between, use cosine decay down to min learning rate
+    decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
+    assert 0 <= decay_ratio <= 1
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
+    return min_lr + coeff * (learning_rate - min_lr)
+
+train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 start_epoch = 0
 best_accuracy = 0.0
@@ -98,27 +121,42 @@ best_model_file = checkpoint_dir / "best.pt"
 
 if checkpoint_file.exists() and continue_training:
     print(f"Loading checkpoint from {checkpoint_file}")
-    start_epoch, _, best_accuracy = load_checkpoint(model, optimizer, scheduler, "latest.pt")
+    start_epoch, _, best_accuracy = load_checkpoint(model, optimizer, "latest.pt")
     print(f"Resuming from epoch {start_epoch} with best accuracy {best_accuracy:.2f}")
 
 t0 = time.time()
 print("Starting training...")
 for epoch in range(start_epoch, num_epochs):
+
+    running_loss = 0.0
+    lr = get_lr(epoch) if decay_lr else learning_rate
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
     model.train()
     size = len(training_data)
+    progress_bar = tqdm(train_dataloader, desc=f'Epoch {epoch}')
 
-    for batch, (X, y) in enumerate(train_dataloader):
+    for batch, (X, y) in enumerate(progress_bar):
         X, y = X.to(device), y.to(device)
-        pred = model(X)
-        loss = criterion(pred, y) / gradient_accumulation_steps
-        loss.backward()
+        with amp.autocast():
+            pred = model(X)
+            loss = criterion(pred, y) / gradient_accumulation_steps
+        
+        scaler.scale(loss).backward()
+        running_loss += loss.item()
 
         if (batch + 1) % gradient_accumulation_steps == 0:
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad()
 
-    scheduler.step()
+    progress_bar.set_postfix({
+        'loss': running_loss * gradient_accumulation_steps / (batch + 1),
+        'lr': optimizer.param_groups[0]['lr']
+    })
 
     if epoch % eval_iter == 0:
         model.eval()
@@ -144,17 +182,17 @@ for epoch in range(start_epoch, num_epochs):
 
         if epoch % save_iter == 0:
             save_checkpoint(
-                model, optimizer, scheduler,
+                model, optimizer, 
                 epoch + 1, test_loss, acc,
-                "latest.pt"
+                f"{dataset}_latest.pt"
             )
             
             if acc > best_accuracy:
                 best_accuracy = acc
                 save_checkpoint(
-                    model, optimizer, scheduler,
+                    model, optimizer, 
                     epoch + 1, test_loss, acc,
-                    "best.pt"
+                    f"{dataset}_best.pt"
                 )
                 print(f"New best model saved with accuracy: {acc:.3f}")
 
