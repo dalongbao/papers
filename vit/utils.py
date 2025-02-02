@@ -1,3 +1,4 @@
+import os
 import torch
 from torchvision import transforms
 import torchvision.datasets as datasets
@@ -97,24 +98,50 @@ def get_dataset(dataset='cifar10'):
     }
     
     dataset = dataset.lower()
+    data_dir = Path("../data") / dataset
     if dataset not in dataset_map:
         raise ValueError(f"Dataset {dataset} not supported. Choose from {list(dataset_map.keys())}")
     
-    DatasetClass = dataset_map[dataset]
-    data_dir = Path("../data") / dataset
-    
-    training_data = DatasetClass(
-        root=str(data_dir),
-        train=True,
-        download=True,
-        transform=train_transform
-    )
-    
-    test_data = DatasetClass(
-        root=str(data_dir),
-        train=False,
-        download=True,
-        transform=test_transform
-    )
+    if dataset != "imagenet":
+        DatasetClass = dataset_map[dataset]
+        
+        training_data = DatasetClass(
+            root=str(data_dir),
+            train=True,
+            download=True,
+            transform=train_transform
+        )
+        
+        test_data = DatasetClass(
+            root=str(data_dir),
+            train=False,
+            download=True,
+            transform=test_transform
+        )
+
+    else:
+        traindir = os.path.join(data_dir, 'train')
+        valdir = os.path.join(data_dir, 'val')
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+
+        training_data = datasets.ImageFolder(
+            traindir,
+            transforms.Compose([
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ]))
+
+        test_data = datasets.ImageFolder(
+            valdir,
+            transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                normalize,
+            ]))
+
     
     return training_data, test_data
