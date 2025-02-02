@@ -34,6 +34,7 @@ weight_decay = 0.3
 warmup_steps = 10000 * (256/4096) 
 grad_clip = 1.0
 gradient_accumulation_steps = 8
+continue_training = False
 
 image_size = (224, 224)
 patch_size = (16, 16)
@@ -94,10 +95,10 @@ best_accuracy = 0.0
 checkpoint_file = checkpoint_dir / "latest.pt"
 best_model_file = checkpoint_dir / "best.pt"
 
-if checkpoint_file.exists():
+if checkpoint_file.exists() and continue_training:
     print(f"Loading checkpoint from {checkpoint_file}")
     start_epoch, _, best_accuracy = load_checkpoint(model, optimizer, scheduler, "latest.pt")
-    print(f"Resuming from epoch {start_epoch} with best accuracy {best_accuracy:.2f}%")
+    print(f"Resuming from epoch {start_epoch} with best accuracy {best_accuracy:.2f}")
 
 t0 = time.time()
 print("Starting training...")
