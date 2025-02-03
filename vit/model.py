@@ -165,3 +165,56 @@ class ViT(nn.Module):
         x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
         x = self.mlp(x)
         return x
+
+class KellyAdamW(torch.optim.AdamW):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-2):
+        super().__init__(params, lr, betas, eps, weight_decay)
+        self.running_loss = []
+        self.epoch_losses = []
+        
+    def step(self, running_loss=None):
+        if running_loss is not None:
+            self.running_loss.append(running_loss)
+            
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                    
+                # Weight decay first (AdamW style)
+                p.data.mul_(1 - group['lr'] * group['weight_decay'])
+                
+                # Then Kelly-scaled Adam update
+                state = self.state[p]
+                kelly_fr = self._calculate_kelly_fraction(
+                    p.grad.norm().item(),  # Convert tensor to float
+                    self.running_loss[-1] if self.running_loss else 1.0,
+                    self.epoch_losses
+                )
+                
+                step_size = group['lr'] * kelly_fr
+                p.data.addcdiv_(p.grad, torch.sqrt(state['v']) + self.eps, value=-step_size)
+
+    def _calculate_kelly_fraction(
+        self,
+        gradient: float,
+        current_loss: float,  
+        historical_losses: list  
+    ) -> float:
+        if len(historical_losses) < 2:
+            return 1.0  # Return 1.0 instead of learning_rate
+            
+        avg_historical_loss = np.mean(historical_losses[-5:])
+        # Flip win_prob since lower loss is better
+        win_prob = 1.0 / (1.0 + np.exp(-(avg_historical_loss - current_loss)))
+        
+        # Use parameter norm from current group instead of self.weights_
+        param_norm = 0
+        for group in self.param_groups:
+            for p in group['params']:
+                param_norm += p.data.norm().item()
+        param_norm = param_norm / len(self.param_groups)
+        
+        edge = gradient / (param_norm + 1e-8)
+        kelly_fraction = (win_prob * edge - (1 - win_prob)) / edge
+        return np.clip(kelly_fraction, 0, 1.0)  # Clip between 0 and 1

@@ -17,11 +17,11 @@ import numpy as np
 from pathlib import Path
 
 from utils import save_checkpoint, load_checkpoint, get_dataset
-from model import ViT, ViTConfig
+from model import ViT, ViTConfig, KellyAdamW
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,expandable_segments:True'
 
-dataset = 'imagenet'
+dataset = 'cifar100'
 checkpoint_dir = Path('./ckpts')
 checkpoint_dir.mkdir(exist_ok=True)
 print(f"using dataset {dataset}")
@@ -32,7 +32,7 @@ save_iter = 20
 batch_size = 32 # GPU mem / (4 * input tensor size * no. parameters) 
 num_workers = 2
 
-training_data, test_data = get_dataset(dataset)
+training_data, test_data, num_classes = get_dataset(dataset)
 train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
@@ -50,7 +50,6 @@ continue_training = False
 
 image_size = (224, 224)
 patch_size = (16, 16)
-num_classes = 1000
 dim = 768
 dim_head = 64
 depth = 12
@@ -84,19 +83,13 @@ model = model.to(device)
 model = torch.compile(model)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.AdamW(
+optimizer = KellyAdamW(
     model.parameters(), 
     lr=learning_rate, 
     betas=betas,
     eps=eps,
     weight_decay=weight_decay
 )
-
-# scheduler = optim.lr_scheduler.CosineAnnealingLR(
-#     optimizer,
-#     T_max=num_epochs,
-#     eta_min=1e-6
-# )
 
 scaler = amp.GradScaler('cuda')
 
@@ -149,9 +142,18 @@ for epoch in range(start_epoch, num_epochs):
         if (batch + 1) % gradient_accumulation_steps == 0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
+            # update optimizer with averaged running loss
+            avg_running_loss = running_loss / ((batch + 1) / gradient_accumulation_steps)
+            optimizer.running_loss.append(avg_running_loss)
+
             scaler.step(optimizer)
             scaler.update()
             optimizer.zero_grad()
+
+    # update optimizer with epoch loss
+    epoch_loss = running_loss / (len(train_dataloader) / gradient_accumulation_steps)
+    optimizer.epoch_losses.append(epoch_loss)
 
     progress_bar.set_postfix({
         'loss': running_loss * gradient_accumulation_steps / (batch + 1),

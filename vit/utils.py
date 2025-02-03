@@ -86,9 +86,9 @@ def get_dataset(dataset='cifar10'):
         ValueError: If dataset is not supported
     """
     dataset_map = {
-        'cifar10': datasets.CIFAR10,
-        'cifar100': datasets.CIFAR100,
-        'mnist': datasets.MNIST,
+        'cifar10': (datasets.CIFAR10, 10),
+        'cifar100': (datasets.CIFAR100, 100),
+        'mnist': (datasets.MNIST, 10),
         'fashionmnist': datasets.FashionMNIST,
         'imagenet': datasets.ImageNet
     }
@@ -99,7 +99,7 @@ def get_dataset(dataset='cifar10'):
         raise ValueError(f"Dataset {dataset} not supported. Choose from {list(dataset_map.keys())}")
     
     if dataset != "imagenet":
-        DatasetClass = dataset_map[dataset]
+        DatasetClass, num_classes = dataset_map[dataset]
         
         training_data = DatasetClass(
             root=str(data_dir),
@@ -138,5 +138,7 @@ def get_dataset(dataset='cifar10'):
                 transforms.ToTensor(),
                 normalize,
             ]))
+
+        num_classes = 1000
     
-    return training_data, test_data
+    return training_data, test_data, num_classes
