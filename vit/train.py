@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 from torchvision.transforms import ToTensor
 
 from tqdm import tqdm
-import torch.cuda.amp as amp
+import torch.amp as amp
 
 import os
 import math
@@ -31,16 +31,21 @@ eval_iter = 20
 save_iter = 20
 batch_size = 32 # GPU mem / (4 * input tensor size * no. parameters) 
 num_workers = 2
+
+training_data, test_data = get_dataset(dataset)
+train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
 learning_rate = 3e-3 * (256/4096) 
 betas = (0.9, 0.999)
 eps = 1e-8
 weight_decay = 0.3 
 decay_lr = True
-lr_decay_iters = 600000 # revisit
+lr_decay_iters = len(train_dataloader) * num_epochs // 2 # revisit
 min_lr = 6e-5 # revisit
 warmup_iters = 10000 * (256/4096) 
 grad_clip = 1.0
-gradient_accumulation_steps = 8
+gradient_accumulation_steps = 4
 continue_training = False
 
 image_size = (224, 224)
@@ -57,8 +62,6 @@ dropout = 0.1
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu'
 print(f"using device: {device}")
 print(f"using cuda version: {torch.version.cuda}" if torch.cuda.is_available() else "")
-
-training_data, test_data = get_dataset(dataset)
 
 # ViT-Base/16 (16 x 16 patches)
 config = ViTConfig(
@@ -95,7 +98,7 @@ optimizer = optim.AdamW(
 #     eta_min=1e-6
 # )
 
-scaler = amp.GradScaler()
+scaler = amp.GradScaler('cuda')
 
 # poor man's warmup + scheduler, taken directly from nanoGPT
 def get_lr(it):
@@ -110,9 +113,6 @@ def get_lr(it):
     assert 0 <= decay_ratio <= 1
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
-
-train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 start_epoch = 0
 best_accuracy = 0.0
@@ -139,7 +139,7 @@ for epoch in range(start_epoch, num_epochs):
 
     for batch, (X, y) in enumerate(progress_bar):
         X, y = X.to(device), y.to(device)
-        with amp.autocast():
+        with torch.autocast(device_type='cuda'):
             pred = model(X)
             loss = criterion(pred, y) / gradient_accumulation_steps
         
@@ -168,7 +168,6 @@ for epoch in range(start_epoch, num_epochs):
             for X, y in test_dataloader:
                 X, y = X.to(device), y.to(device)
                 pred = model(X)
-                loss = criterion(pred, y)
                 test_loss += criterion(pred, y).item()
                 acc += (pred.argmax(1) == y).type(torch.float).sum().item()
                     
