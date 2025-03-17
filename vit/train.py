@@ -27,8 +27,8 @@ checkpoint_dir.mkdir(exist_ok=True)
 print(f"using dataset {dataset}")
 
 num_epochs = 4800
-eval_iter = 20
-save_iter = 20
+eval_iter = 5
+save_iter = 10
 batch_size = 32 # GPU mem / (4 * input tensor size * no. parameters) 
 num_workers = 2
 
@@ -47,6 +47,14 @@ warmup_iters = 10000 * (256/4096)
 grad_clip = 1.0
 gradient_accumulation_steps = 4
 continue_training = False
+
+# kebab parameters
+epsilon = 1e-3
+alpha = 5e-2 
+beta = 1 - alpha
+variance = 0
+mean_loss = 0
+mean_loss_vec = torch.zeros(num_classes)
 
 image_size = (224, 224)
 patch_size = (16, 16)
@@ -83,7 +91,7 @@ model = model.to(device)
 model = torch.compile(model)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = KellyAdamW(
+optimizer = optim.AdamW(
     model.parameters(), 
     lr=learning_rate, 
     betas=betas,
@@ -94,7 +102,7 @@ optimizer = KellyAdamW(
 scaler = amp.GradScaler('cuda')
 
 # poor man's warmup + scheduler, taken directly from nanoGPT
-def get_lr(it):
+def get_lr(it, loss_vec, mean_running_loss_vec, running_variance):
     # 1) linear warmup for warmup_iters steps
     if it < warmup_iters:
         return learning_rate * (it + 1) / (warmup_iters + 1)
@@ -106,6 +114,14 @@ def get_lr(it):
     assert 0 <= decay_ratio <= 1
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
+
+# because loss is already minibatched into grad accum steps, i'll keep a running mean loss and 
+def get_kelly(loss_vec, mean_loss_vec, mean_loss, variance):
+    lossdot = torch.dot(mean_running_loss_vec, loss_vec)
+    new_mean = beta * mean_running_loss + alpha * lossdot
+    new_var = beta * running_variance + alpha * ((lossdot - mean)**2)
+    kelly_fraction = new_mean / (new_var + epsilon)    
+    return kelly_fraction, new_mean, new_var
 
 start_epoch = 0
 best_accuracy = 0.0
@@ -123,9 +139,11 @@ for epoch in range(start_epoch, num_epochs):
 
     running_loss = 0.0
     lr = get_lr(epoch) if decay_lr else learning_rate
+
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+    running_loss_mat = []
     model.train()
     size = len(training_data)
     progress_bar = tqdm(train_dataloader, desc=f'Epoch {epoch}')
@@ -139,21 +157,16 @@ for epoch in range(start_epoch, num_epochs):
         scaler.scale(loss).backward()
         running_loss += loss.item()
 
+        # kebab
+        mean_loss = (mean_loss + loss.item()) / 2
+        loss_vec = (y - loss_vec) ** 2
+
         if (batch + 1) % gradient_accumulation_steps == 0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-
-            # update optimizer with averaged running loss
-            avg_running_loss = running_loss / ((batch + 1) / gradient_accumulation_steps)
-            optimizer.running_loss.append(avg_running_loss)
-
             scaler.step(optimizer)
             scaler.update()
             optimizer.zero_grad()
-
-    # update optimizer with epoch loss
-    epoch_loss = running_loss / (len(train_dataloader) / gradient_accumulation_steps)
-    optimizer.epoch_losses.append(epoch_loss)
 
     progress_bar.set_postfix({
         'loss': running_loss * gradient_accumulation_steps / (batch + 1),
